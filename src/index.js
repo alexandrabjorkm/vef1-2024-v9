@@ -68,31 +68,48 @@ function renderIntoResultsContent(element) {
  * @param {Array<import('./lib/weather.js').Forecast>} results
  */
 function renderResults(location, results) {
+
+  const mainHeading = el('h2', {}, 'Niðurstöður');
+  const locationHeading = el('h3', {}, location.title);
+  
+  let locationDetails = null;
+  if (location.title !== "Núverandi staðsetning") {
+    locationDetails = el(
+      'p',
+      {},
+      `Spá fyrir daginn á breiddargráðu ${location.lat.toFixed(4)} og lengdargráðu ${location.lng.toFixed(4)}.`
+    );
+  }
+
   const header = el(
     'tr',
     {},
-    el('th', {}, 'Tími'),
-    el('th', {}, 'Hiti'),
-    el('th', {}, 'Úrkoma'),
-  );
-  console.log(results);
-  const body = el(
-    'tr',
-    {},
-    el('td', {}, 'Tími'),
-    el('td', {}, 'Hiti'),
-    el('td', {}, 'Úrkoma'),
+    el('th', {}, 'Klukkutími'),
+    el('th', {}, 'Hiti (°C)'),
+    el('th', {}, 'Úrkoma (mm)')
   );
 
-  const resultsTable = el('table', { class: 'forecast' }, header, body);
+  const bodyRows = results.map((forecast) => {
+    return el(
+      'tr',
+      {},
+      el('td', {}, forecast.time.split('T')[1].slice(0, 5)), 
+      el('td', {}, forecast.temperature.toFixed(1)), 
+      el('td', {}, forecast.precipitation.toFixed(1)) 
+    );
+  });
+
+  const resultsTable = el('table', { class: 'forecast' }, header, ...bodyRows);
 
   renderIntoResultsContent(
     el(
       'section',
       {},
-      el('h2', {}, `Leitarniðurstöður fyrir: ${location.title}`),
-      resultsTable,
-    ),
+      mainHeading,
+      locationHeading,
+      locationDetails,
+      resultsTable
+    )
   );
 }
 
@@ -140,7 +157,32 @@ async function onSearch(location) {
  * Biður notanda um leyfi gegnum vafra.
  */
 async function onSearchMyLocation() {
-  // TODO útfæra
+  renderLoading();
+
+  if (!navigator.geolocation) {
+    renderError(new Error("Ekki hægt að ná í núverandi staðsetningu."));
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      let results;
+      try {
+        results = await weatherSearch(lat, lng);
+      } catch (error) {
+        renderError(error);
+        return;
+      }
+
+      renderResults({ title: "Núverandi staðsetning" }, results);
+    },
+    (error) => {
+      renderError(new Error("Fékk ekki leyfi fyrir núverandi staðsetningu."));
+    }
+  );
 }
 
 /**
@@ -188,8 +230,11 @@ function render(container, locations, onSearch, onSearchMyLocation) {
   // Búum til <header> með beinum DOM aðgerðum
   const headerElement = document.createElement('header');
   const heading = document.createElement('h1');
-  heading.appendChild(document.createTextNode('<fyrirsögn>'));
+  heading.appendChild(document.createTextNode('Veðrið'));
   headerElement.appendChild(heading);
+  const subtitle = document.createElement('p');
+  subtitle.appendChild(document.createTextNode('Veldu stað til að sjá hita- og úrkomuspá.'));
+  headerElement.appendChild(subtitle);
   parentElement.appendChild(headerElement);
 
   // TODO útfæra inngangstexta
@@ -200,6 +245,10 @@ function render(container, locations, onSearch, onSearchMyLocation) {
   // Búa til <ul class="locations__list">
   const locationsListElement = document.createElement('ul');
   locationsListElement.classList.add('locations__list');
+
+  //Mín staðsetning (þarf leyfi)
+  const myLocationButton = renderLocationButton("Mín staðsetning (þarf leyfi)", onSearchMyLocation);
+  locationsListElement.appendChild(myLocationButton);
 
   // <div class="loctions"><ul class="locations__list"></ul></div>
   locationsElement.appendChild(locationsListElement);
